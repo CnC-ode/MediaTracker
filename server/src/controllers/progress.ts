@@ -165,6 +165,27 @@ export class ProgressController {
 
     res.send();
   });
+
+  /**
+   * @description Get all progress
+   * @openapi_operationId get
+   */
+  get = createExpressRoute<{
+    method: 'get';
+    path: '/api/progress';
+    /**
+     * @description List of progress
+     */
+    responseBody: Progress[];
+  }>(async (req, res) => {
+    const userId = Number(req.user);
+
+    const progressList = await progressRepository.find({
+      userId: userId,
+    });
+
+    res.send(progressList);
+  });
 }
 
 const addItem = async (args: Progress) => {
