@@ -71,6 +71,8 @@ const getItemsKnexSql = async (args: GetItemsArgs) => {
     onlyWithUserRating,
     onlyWithoutUserRating,
     onlyWithProgress,
+    onlyUnseenItems,
+    includeUnreleasedItems,
   } = args;
 
   const currentDateString = new Date().toISOString();
@@ -240,9 +242,14 @@ const getItemsKnexSql = async (args: GetItemsArgs) => {
             'episode.id'
           )
           .whereNot('episode.isSpecialEpisode', true)
-          .whereNot('episode.releaseDate', '')
-          .whereNot('episode.releaseDate', null)
-          .where('episode.releaseDate', '<=', currentDateString)
+          .where((qb) => {
+            if (!includeUnreleasedItems) {
+              qb
+                .whereNot('episode.releaseDate', '')
+                .whereNot('episode.releaseDate', null)
+                .where('episode.releaseDate', '<=', currentDateString)
+            }
+          })
           .whereNull('seen.userId')
           .groupBy('tvShowId')
           .as('firstUnwatchedEpisodeHelper'),
@@ -316,6 +323,23 @@ const getItemsKnexSql = async (args: GetItemsArgs) => {
             .where('mediaItem.mediaType', 'tv')
             .orWhere('mediaItem.releaseDate', '<=', currentDateString)
         );
+    }
+    
+    if (onlyUnseenItems) {
+      query
+        .andWhere((qb) =>
+          qb
+            .where((qb) => {
+              qb
+                .where('mediaItem.mediaType', 'tv')
+                .where('seenEpisodesCount', null)
+            })
+            .orWhere((qb) =>
+              qb
+                .where('mediaItem.mediaType', 'movie')
+                .where('lastSeen.mediaItemId', null)
+              )
+        )
     }
 
     // Media type
@@ -450,6 +474,10 @@ const getItemsKnexSql = async (args: GetItemsArgs) => {
                             ELSE "progress"
                           END ${sortOrder}`);
         query.orderBy('mediaItem.title', 'asc');
+        break;
+
+      case 'random':
+        query.orderByRaw('random()');
         break;
 
       default:

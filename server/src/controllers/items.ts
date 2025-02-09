@@ -37,6 +37,8 @@ export class ItemsController {
       onlyWithUserRating,
       onlyWithoutUserRating,
       onlyWithProgress,
+      onlyUnseenItems,
+      includeUnreleasedItems,
     } = req.query;
 
     const orderBy = req.query.orderBy || 'title';
@@ -61,6 +63,8 @@ export class ItemsController {
       onlyWithUserRating: onlyWithUserRating,
       onlyWithoutUserRating: onlyWithoutUserRating,
       onlyWithProgress: onlyWithProgress,
+      onlyUnseenItems: onlyUnseenItems,
+      includeUnreleasedItems: includeUnreleasedItems,
     });
 
     res.send(result);
@@ -89,6 +93,8 @@ export class ItemsController {
       onlyWithUserRating,
       onlyWithoutUserRating,
       onlyWithProgress,
+      onlyUnseenItems,
+      includeUnreleasedItems,
     } = req.query;
 
     const orderBy = req.query.orderBy || 'title';
@@ -107,6 +113,8 @@ export class ItemsController {
       onlyWithUserRating: onlyWithUserRating,
       onlyWithoutUserRating: onlyWithoutUserRating,
       onlyWithProgress: onlyWithProgress,
+      onlyUnseenItems: onlyUnseenItems,
+      includeUnreleasedItems: includeUnreleasedItems,
     });
 
     res.send(result);
