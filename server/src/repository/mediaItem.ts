@@ -86,6 +86,7 @@ export type GetItemsArgs = {
   onlyWithProgress?: boolean;
 
   page?: number;
+  limit?: number;
   mediaItemIds?: number[];
 };
 

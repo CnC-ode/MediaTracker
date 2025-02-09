@@ -16,7 +16,7 @@ import { Progress } from 'src/entity/progress';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const getItemsKnex = async (args: any): Promise<any> => {
-  const { page } = args;
+  const { page, limit } = args;
   const { sqlQuery, sqlCountQuery, sqlPaginationQuery } = await getItemsKnexSql(
     args
   );
@@ -29,7 +29,7 @@ export const getItemsKnex = async (args: any): Promise<any> => {
       return [resCount, res];
     });
 
-    const itemsPerPage = 40;
+    const itemsPerPage = limit ?? 40;
     const total = Number(resCount[0].count);
     const from = itemsPerPage * (page - 1);
     const to = Math.min(total, itemsPerPage * page);
@@ -63,6 +63,7 @@ const getItemsKnexSql = async (args: GetItemsArgs) => {
     filter,
     orderBy,
     page,
+    limit,
     onlySeenItems,
     sortOrder,
     onlyWithNextEpisodesToWatch,
@@ -466,7 +467,7 @@ const getItemsKnexSql = async (args: GetItemsArgs) => {
   let sqlPaginationQuery;
 
   if (page) {
-    const itemsPerPage = 40;
+    const itemsPerPage = limit ?? 40;
     const skip = itemsPerPage * (page - 1);
     const take = itemsPerPage;
 
