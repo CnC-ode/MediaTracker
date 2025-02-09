@@ -4,6 +4,15 @@ import { tvEpisodeRepository } from 'src/repository/episode';
 import { repository } from 'src/repository/repository';
 import { Database } from 'src/dbconfig';
 
+export type Pagination<T> = {
+  data: T[];
+  page: number;
+  totalPages: number;
+  from: number;
+  to: number;
+  total: number;
+};
+
 class SeenRepository extends repository<Seen>({
   tableName: 'seen',
   columnNames: seenColumns,
