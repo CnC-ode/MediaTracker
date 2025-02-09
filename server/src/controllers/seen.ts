@@ -6,8 +6,8 @@ import { TvEpisodeFilters } from 'src/entity/tvepisode';
 import { tvEpisodeRepository } from 'src/repository/episode';
 import { LastSeenAt, mediaItemRepository } from 'src/repository/mediaItem';
 import { tvSeasonRepository } from 'src/repository/season';
-import { seenRepository } from 'src/repository/seen';
-import { Seen } from 'src/entity/seen';
+import { seenRepository, Pagination } from 'src/repository/seen';
+import { Seen, SeenExtended } from 'src/entity/seen';
 import { logger } from 'src/logger';
 import { listItemRepository } from 'src/repository/listItemRepository';
 import { MediaType } from 'src/entity/mediaItem';
@@ -357,4 +357,123 @@ export class SeenController {
 
     res.send();
   });
+
+    /**
+     * @description Get all seen items
+     * @openapi_operationId get
+     */
+    get = createExpressRoute<{
+      method: 'get';
+      path: '/api/seen';
+      /**
+       * @description List of seen items
+       */
+      requestQuery: {
+        page?: number;
+        limit?: number;
+        extended?: boolean;
+        mediaType?: MediaType;
+        tmdbId?: number;
+        seasonNumber?: number;
+        episodeNumber?: number;
+      };
+      responseBody: Seen[] | SeenExtended[] | Pagination<Seen> | Pagination<SeenExtended>;
+    }>(async (req, res) => {
+      const userId = Number(req.user);
+  
+      const page  = Number(req.query.page);
+      const limit  = Number(req.query.limit);
+      const extended  = req.query.extended;
+      const mediaType  = req.query.mediaType;
+      const tmdbId  = Number(req.query.tmdbId);
+      const seasonNumber  = Number(req.query.seasonNumber);
+      const episodeNumber  = Number(req.query.episodeNumber);
+  
+      const query = Database.knex
+        .from<Seen | SeenExtended>('seen')
+        .modify((qb) => {
+          if (extended) {
+            qb
+            .select(
+              'seen.id',
+              'seen.date',
+              'seen.mediaItemId',
+              'seen.episodeId',
+              'seen.userId',
+              'seen.duration',
+              'mediaItem.title',
+              'episode.title',
+              'mediaItem.mediaType',
+              'mediaItem.tmdbId',
+              'episode.seasonNumber',
+              'episode.episodeNumber',
+            )
+            .leftJoin('mediaItem', 'mediaItem.id', 'seen.mediaItemId')
+            .leftJoin('episode', 'episode.id', 'seen.episodeId')
+            .where((qb) => {
+              if (mediaType) {
+                qb.where('mediaItem.mediaType', mediaType);
+              }
+              if (tmdbId) {
+                qb.where('mediaItem.tmdbId', tmdbId);
+              }
+              if (seasonNumber) {
+                qb.where('episode.seasonNumber', seasonNumber);
+              }
+              if (episodeNumber) {
+                qb.where('episode.episodeNumber', episodeNumber);
+              }
+            })
+          }
+        })
+        .where('userId', userId)
+        .orderBy('seen.date', 'desc')
+
+      if (page) {
+        const itemsPerPage = limit ?? 15;
+
+        const sqlCountQuery = query
+          .clone()
+          .clearOrder()
+          .clearSelect()
+          .count('*', { as: 'count' })
+          .first();
+
+        const skip = itemsPerPage * (page - 1);
+        const take = itemsPerPage;
+        const sqlPaginationQuery = query
+          .clone()
+          .limit(take)
+          .offset(skip);
+      
+        const [itemsCount, pagedItems] = await Database.knex.transaction(async (trx) => {
+          const itemsCount = await sqlCountQuery.transacting(trx);
+          const pagedItems = await sqlPaginationQuery.transacting(trx);
+    
+          return [itemsCount, pagedItems];
+        });
+  
+        const total = Number(itemsCount.count);
+        const from = itemsPerPage * (page - 1);
+        const to = Math.min(total, itemsPerPage * page);
+        const totalPages = Math.ceil(total / itemsPerPage);
+    
+        if (from > total) {
+          throw new Error('Invalid page number');
+        }
+    
+        res.send({
+          from: from,
+          to: to,
+          data: pagedItems,
+          total: total,
+          page: page,
+          totalPages: totalPages,
+        });
+      } else {
+        const list = await query;
+  
+        res.send(list);
+      }
+    });
 }
