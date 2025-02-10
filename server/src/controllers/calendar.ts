@@ -50,8 +50,8 @@ export class CalendarController {
       })
     : await getCalendarItems({
       userId,
-      start: parseISO(start).toISOString(),
-      end: parseISO(end).toISOString(),
+      start: parseISO(start).toISOString().slice(0, 10),
+      end: parseISO(end).toISOString().slice(0, 10),
       includeAllLists: includeAllLists,
     });
 
