@@ -1,3 +1,5 @@
+import { MediaType } from 'src/entity/mediaItem';
+
 export type ListPrivacy = 'public' | 'private' | 'friends';
 export type ListSortOrder = 'asc' | 'desc';
 export type ListSortBy =
@@ -33,6 +35,11 @@ export type ListItem = {
   seasonId?: number;
   episodeId?: number;
   addedAt: number;
+};
+
+export type ListItemExtended = ListItem & {
+  mediaType: MediaType;
+  tmdbId?: number;
 };
 
 export const listColumns = <const>[

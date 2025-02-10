@@ -123,11 +123,12 @@ class ListItemRepository extends repository<ListItem>({
       })
       .first();
 
+    let deleted = 0;
     if (listItem) {
-      await trx('listItem').delete().where('id', listItem.id);
+      deleted = await trx('listItem').delete().where('id', listItem.id);
     }
 
-    return true;
+    return deleted > 0;
   });
 
   #addOrRemoveListItemFactory(
