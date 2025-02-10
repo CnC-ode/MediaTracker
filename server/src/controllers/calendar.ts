@@ -26,18 +26,23 @@ export class CalendarController {
        * @example 2022-05-21T23:37:36+00:00
        */
       end?: string;
+      /**
+       * @description Include items from all lists
+       */
+      includeAllLists?: boolean;
     };
     responseBody: GetCalendarItemsResponse;
   }>(async (req, res) => {
     const userId = Number(req.user);
 
-    const { start, end } = req.query;
+    const { start, end, includeAllLists } = req.query;
 
     res.send(
       await getCalendarItems({
         userId,
         start: parseISO(start).toISOString(),
         end: parseISO(end).toISOString(),
+        includeAllLists: Boolean(includeAllLists),
       })
     );
   });
@@ -68,8 +73,9 @@ export const getCalendarItems = async (args: {
   userId: number;
   start: string;
   end: string;
+  includeAllLists: boolean;
 }): Promise<GetCalendarItemsResponse> => {
-  const { userId, start, end } = args;
+  const { userId, start, end, includeAllLists } = args;
 
   const res = await Database.knex('list')
     .select({
@@ -151,7 +157,11 @@ export const getCalendarItems = async (args: {
           .andOnNull('listItem.episodeId')
     )
     .where('userId', userId)
-    .where('isWatchlist', true)
+    .where((qb) => {
+      if (!includeAllLists) {
+        qb.where('isWatchlist', true);
+      }
+    })
     .where((qb) =>
       qb
         .orWhere((qb) =>
