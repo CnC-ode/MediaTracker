@@ -30,21 +30,32 @@ export class CalendarController {
        * @description Include items from all lists
        */
       includeAllLists?: boolean;
+      /**
+       * @description Simple calendar (does not support standalone seasons or episodes present on lists)
+       */
+      simple?: boolean;
     };
-    responseBody: GetCalendarItemsResponse;
+    responseBody: GetCalendarItemsResponse | GetSimpleCalendarItemsResponse;
   }>(async (req, res) => {
     const userId = Number(req.user);
 
-    const { start, end, includeAllLists } = req.query;
+    const { start, end, includeAllLists, simple } = req.query;
 
-    res.send(
-      await getCalendarItems({
+  const calendarItems = simple
+    ? await getSimpleCalendarItems({
         userId,
         start: parseISO(start).toISOString(),
         end: parseISO(end).toISOString(),
         includeAllLists: includeAllLists,
       })
-    );
+    : await getCalendarItems({
+      userId,
+      start: parseISO(start).toISOString(),
+      end: parseISO(end).toISOString(),
+      includeAllLists: includeAllLists,
+    });
+
+    res.send(calendarItems);
   });
 }
 
@@ -251,3 +262,85 @@ export const getCalendarItems = async (args: {
     .orderBy('releaseDate')
     .value() as GetCalendarItemsResponse;
 };
+
+export type GetSimpleCalendarItemsResponse = {
+  releaseDate: string;
+  mediaItem: {
+    id: number;
+    mediaType: MediaType;
+    title: string;
+    releaseDate: string;
+    tmdbId: number;
+  };
+  episode: {
+    id: number;
+    seasonNumber: number;
+    episodeNumber: number;
+    title: string;
+    releaseDate: string;
+    isSpecialEpisode: boolean;
+  };
+}[];
+
+export const getSimpleCalendarItems = async (args: {
+  userId: number;
+  start: string;
+  end: string;
+  includeAllLists: boolean;
+}): Promise<GetSimpleCalendarItemsResponse> => {
+  const { userId, start, end, includeAllLists } = args;
+
+  const res = await Database.knex('list')
+    .select({
+      'mediaItem.id': 'mediaItem.id',
+      'mediaItem.mediaType': 'mediaItem.mediaType',
+      'mediaItem.title': 'mediaItem.title',
+      'mediaItem.releaseDate': 'mediaItem.releaseDate',
+      'mediaItem.tmdbId': 'mediaItem.tmdbId',
+      'episode.id': 'episode.id',
+      'episode.seasonNumber': 'episode.seasonNumber',
+      'episode.episodeNumber': 'episode.episodeNumber',
+      'episode.title': 'episode.title',
+      'episode.releaseDate': 'episode.releaseDate',
+      'episode.isSpecialEpisode': 'episode.isSpecialEpisode',
+    })
+    .leftJoin('listItem', 'listItem.listId', 'list.id')
+    .leftJoin('mediaItem', 'mediaItem.id', 'listItem.mediaItemId')
+    .leftJoin('episode', 'episode.tvShowId', 'mediaItem.id')
+    .where('userId', userId)
+    .where((qb) => {
+      if (!includeAllLists) {
+        qb.where('isWatchlist', true);
+      }
+    })
+    .where((qb) =>
+      qb
+        .orWhere((qb) =>
+          qb
+            .whereNot('mediaItem.mediaType', 'tv')
+            .andWhereBetween('mediaItem.releaseDate', [start, end])
+        )
+        .orWhereBetween('episode.releaseDate', [start, end])
+    );
+  
+  const mappedItems = res.map((row) => ({
+    releaseDate: row['mediaItem.mediaType'] == 'tv' ? row['episode.releaseDate'] : row['mediaItem.releaseDate'],
+    mediaItem: {
+      id: row['mediaItem.id'],
+      mediaType: row['mediaItem.mediaType'],
+      title: row['mediaItem.title'],
+      releaseDate: row['mediaItem.releaseDate'],
+      tmdbId: row['mediaItem.tmdbId'],
+    },
+    episode: {
+      id: row['episode.id'],
+      seasonNumber: row['episode.seasonNumber'],
+      episodeNumber: row['episode.episodeNumber'],
+      title: row['episode.title'],
+      releaseDate: row['episode.releaseDate'],
+      isSpecialEpisode: Boolean(row['episode.isSpecialEpisode']),
+    },
+  }));
+
+  return mappedItems;
+}
