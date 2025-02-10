@@ -42,7 +42,7 @@ export class CalendarController {
         userId,
         start: parseISO(start).toISOString(),
         end: parseISO(end).toISOString(),
-        includeAllLists: Boolean(includeAllLists),
+        includeAllLists: includeAllLists,
       })
     );
   });
