@@ -321,8 +321,13 @@ export const getSimpleCalendarItems = async (args: {
             .andWhereBetween('mediaItem.releaseDate', [start, end])
         )
         .orWhereBetween('episode.releaseDate', [start, end])
-    );
-  
+    )
+    .groupBy('mediaItem.id')
+    .groupBy('episode.id')
+    .orderBy('mediaItem.title')
+    .orderBy('episode.seasonNumber')
+    .orderBy('episode.episodeNumber');
+
   const mappedItems = res.map((row) => ({
     releaseDate: row['mediaItem.mediaType'] == 'tv' ? row['episode.releaseDate'] : row['mediaItem.releaseDate'],
     mediaItem: {
