@@ -122,7 +122,7 @@ export class WatchlistController {
     const userId = Number(req.user);
 
     const mediaType  = req.query.mediaType;
-    const tmdbId  = Number(req.query.tmdbId);
+    const tmdbId  = req.query.tmdbId;
 
     const listItem = await getItem({
       userId: userId,
