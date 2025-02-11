@@ -1,5 +1,5 @@
 import { createExpressRoute } from 'typescript-routes-to-openapi-server';
-import { MediaItemDetailsResponse } from 'src/entity/mediaItem';
+import { MediaItemDetailsResponse, MediaType } from 'src/entity/mediaItem';
 import { mediaItemRepository } from 'src/repository/mediaItem';
 import { updateMediaItem } from 'src/updateMetadata';
 
@@ -36,6 +36,41 @@ export class MediaItemController {
 
     const details = await mediaItemRepository.details({
       mediaItemId: mediaItemId,
+      userId: userId,
+    });
+
+    res.send(details);
+  });
+
+  /**
+   * @openapi_operationId getByExternalId
+   */
+  detailsByExternalId = createExpressRoute<{
+    method: 'get';
+    path: '/api/details';
+    requestQuery: {
+      mediaType: MediaType;
+      tmdbId: number;
+    };
+    responseBody: MediaItemDetailsResponse;
+  }>(async (req, res) => {
+    const userId = Number(req.user);
+
+    const {tmdbId, mediaType} = req.query;
+
+    const mediaItem = await mediaItemRepository.findByExternalId({tmdbId: tmdbId}, mediaType);
+
+    if (!mediaItem) {
+      res.status(404).send();
+      return;
+    }
+
+    if (mediaItem.needsDetails == true) {
+      await updateMediaItem(mediaItem);
+    }
+
+    const details = await mediaItemRepository.details({
+      mediaItemId: mediaItem.id,
       userId: userId,
     });
 
