@@ -417,10 +417,10 @@ export class SeenController {
               if (tmdbId) {
                 qb.where('mediaItem.tmdbId', tmdbId);
               }
-              if (seasonNumber) {
+              if (seasonNumber !== undefined) {
                 qb.where('episode.seasonNumber', seasonNumber);
               }
-              if (episodeNumber) {
+              if (episodeNumber !== undefined) {
                 qb.where('episode.episodeNumber', episodeNumber);
               }
             })
