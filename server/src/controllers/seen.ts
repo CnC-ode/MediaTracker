@@ -381,13 +381,13 @@ export class SeenController {
     }>(async (req, res) => {
       const userId = Number(req.user);
   
-      const page  = Number(req.query.page);
-      const limit  = Number(req.query.limit);
+      const page  = req.query.page;
+      const limit  = req.query.limit;
       const extended  = req.query.extended;
       const mediaType  = req.query.mediaType;
-      const tmdbId  = Number(req.query.tmdbId);
-      const seasonNumber  = Number(req.query.seasonNumber);
-      const episodeNumber  = Number(req.query.episodeNumber);
+      const tmdbId  = req.query.tmdbId;
+      const seasonNumber  = req.query.seasonNumber;
+      const episodeNumber  = req.query.episodeNumber;
   
       const query = Database.knex
         .from<Seen | SeenExtended>('seen')
