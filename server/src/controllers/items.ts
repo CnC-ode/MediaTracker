@@ -80,7 +80,7 @@ export class ItemsController {
   get = createExpressRoute<{
     method: 'get';
     path: '/api/items';
-    requestQuery: Omit<GetItemsRequest, 'page'>;
+    requestQuery: Omit<GetItemsRequest, 'page' | 'limit'>;
     responseBody: MediaItemItemsResponse[];
   }>(async (req, res) => {
     const userId = Number(req.user);
