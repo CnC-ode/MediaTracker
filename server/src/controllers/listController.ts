@@ -1,9 +1,13 @@
 import { Database } from 'src/dbconfig';
 import { List, ListPrivacy, ListSortBy, ListSortOrder } from 'src/entity/list';
+import { MediaType } from 'src/entity/mediaItem';
 import {
   ListItemsResponse,
   listRepository,
   ListDetailsResponse,
+  Pagination,
+  MediaItemOrderBy,
+  SortOrder,
 } from 'src/repository/list';
 import { createExpressRoute } from 'typescript-routes-to-openapi-server';
 
@@ -141,11 +145,17 @@ export class ListController {
     path: '/api/list/items';
     requestQuery: {
       listId: number;
+      mediaType?: MediaType;
+      tmdbId?: number;
+      page?: number;
+      limit?: number;
+      orderBy?: MediaItemOrderBy;
+      sortOrder?: SortOrder;
     };
-    responseBody: ListItemsResponse;
+    responseBody: ListItemsResponse[] | Pagination<ListItemsResponse>;
   }>(async (req, res) => {
     const currentUser = Number(req.user);
-    const { listId } = req.query;
+    const { listId, mediaType, tmdbId, page, limit, orderBy, sortOrder } = req.query;
 
     const list = await Database.knex<List>('list').where('id', listId).first();
 
@@ -162,6 +172,12 @@ export class ListController {
     const items = await listRepository.items({
       listId: list.id,
       userId: currentUser,
+      mediaType: mediaType,
+      tmdbId: tmdbId,
+      page: page,
+      limit: limit,
+      orderBy: orderBy,
+      sortOrder: sortOrder,
     });
 
     res.send(items);

@@ -37,7 +37,7 @@ export class ListsController {
 
     const user = await Database.knex('user')
       .select('id', 'name')
-      .where('id', userId)
+      .where('id', userId ?? currentUserId)
       .first();
 
     if (!user) {
@@ -99,14 +99,14 @@ export const getUserLists = async (args: {
           .where(
             episodeId
               ? {
-                  episodeId: episodeId,
-                }
+                episodeId: episodeId,
+              }
               : seasonId
-              ? {
+                ? {
                   seasonId: seasonId,
                   episodeId: null,
                 }
-              : {
+                : {
                   mediaItemId: mediaItemId,
                   seasonId: null,
                   episodeId: null,
