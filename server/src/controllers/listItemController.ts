@@ -1,6 +1,10 @@
 import { listItemRepository } from 'src/repository/listItemRepository';
 import { createExpressRoute } from 'typescript-routes-to-openapi-server';
 
+import { MediaType, ExternalIds } from 'src/entity/mediaItem';
+import { findMediaItemByExternalIdInExternalSources } from 'src/metadata/findByExternalId';
+import { listRepository } from 'src/repository/list';
+
 /**
  * @openapi_tags List Item
  */
@@ -64,6 +68,50 @@ export class ListItemController {
       res.sendStatus(400);
     } else {
       res.send();
+    }
+  });
+
+  /**
+   * @openapi_operationId addByExternalId
+   */
+  addByExternalId = createExpressRoute<{
+    method: 'put';
+    path: '/api/list-item/by-external-id';
+    requestBody: {
+      listId: number;
+      mediaType: MediaType;
+      id: ExternalIds;
+    };
+  }>(async (req, res) => {
+    const userId = Number(req.user);
+
+    const { listId, mediaType, id } = req.body;
+
+    const mediaItem = await findMediaItemByExternalIdInExternalSources({
+      mediaType: mediaType,
+      id: id
+    });
+
+    if (!mediaItem) {
+      res.sendStatus(404);
+    }
+
+    if (
+      !(await listItemRepository.addItem({
+        userId: userId,
+        mediaItemId: mediaItem.id,
+        listId,
+      }))
+    ) {
+      res.sendStatus(400);
+    } else {
+      const listItem = await listRepository.getItem({
+        userId: userId,
+        mediaType: mediaItem.mediaType,
+        listId: listId,
+        id: mediaItem.id,
+      });
+      res.send(listItem);
     }
   });
 }

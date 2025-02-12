@@ -3,6 +3,7 @@ import { Database } from 'src/dbconfig';
 import {
   List,
   ListItem,
+  ListItemExtended,
   ListPrivacy,
   ListSortBy,
   ListSortOrder,
@@ -30,7 +31,24 @@ export type ListItemsResponse = {
   mediaItem: MediaItemItemsResponse;
   season?: TvSeason;
   episode?: TvEpisode;
-}[];
+};
+
+export type Pagination<T> = {
+  data: T[];
+  page: number;
+  totalPages: number;
+  from: number;
+  to: number;
+  total: number;
+};
+
+export type MediaItemOrderBy =
+  | 'title'
+  | 'releaseDate'
+  | 'listedAt'
+  | 'random';
+
+export type SortOrder = 'asc' | 'desc';
 
 class ListRepository extends repository<List>({
   tableName: 'list',
@@ -266,8 +284,14 @@ class ListRepository extends repository<List>({
   public async items(args: {
     listId: number;
     userId: number;
-  }): Promise<ListItemsResponse> {
-    const { listId, userId } = args;
+    mediaType?: MediaType;
+    tmdbId?: number;
+    page?: number;
+    limit?: number;
+    orderBy?: MediaItemOrderBy;
+    sortOrder?: SortOrder;
+  }): Promise<ListItemsResponse[] | Pagination<ListItemsResponse>> {
+    const { listId, userId, mediaType, tmdbId, page, limit, orderBy, sortOrder } = args;
 
     const { id: watchlistId } = await Database.knex('list')
       .select('id')
@@ -277,7 +301,7 @@ class ListRepository extends repository<List>({
 
     const currentDateString = new Date().toISOString();
 
-    const res = await Database.knex<ListItem>('listItem')
+    const query = Database.knex<ListItem>('listItem')
       .select({
         'episode.episodeNumber': 'episode.episodeNumber',
         'episode.imdbId': 'episode.imdbId',
@@ -292,6 +316,7 @@ class ListRepository extends repository<List>({
         'episode.tmdbId': 'episode.tmdbId',
         'episode.traktId': 'episode.traktId',
         'episode.tvdbId': 'episode.tvdbId',
+        'episode.userRating.userId': 'episodeRating.userId',
         'episode.userRating.date': 'episodeRating.date',
         'episode.userRating.rating': 'episodeRating.rating',
         'episode.watchlist.id': 'episodeWatchlist.id',
@@ -395,6 +420,7 @@ class ListRepository extends repository<List>({
         'mediaItem.traktId': 'mediaItem.traktId',
         'mediaItem.tvdbId': 'mediaItem.tvdbId',
         'mediaItem.url': 'mediaItem.url',
+        'mediaItem.userRating.userId': 'mediaItemRating.userId',
         'mediaItem.userRating.date': 'mediaItemRating.date',
         'mediaItem.userRating.rating': 'mediaItemRating.rating',
         'mediaItem.watchlist.id': 'mediaItemWatchlist.id',
@@ -453,12 +479,21 @@ class ListRepository extends repository<List>({
         'season.tmdbId': 'season.tmdbId',
         'season.traktId': 'season.traktId',
         'season.tvdbId': 'season.tvdbId',
+        'season.userRating.userId': 'seasonRating.userId',
         'season.userRating.date': 'seasonRating.date',
         'season.userRating.rating': 'seasonRating.rating',
         'season.totalRuntime': 'seasonTotalRuntime.totalRuntime',
         'season.watchlist.id': 'seasonWatchlist.id',
       })
       .where('listItem.listId', listId)
+      .where((qb) => {
+        if (mediaType) {
+          qb.where('mediaItem.mediaType', mediaType)
+        }
+        if (tmdbId) {
+          qb.where('mediaItem.tmdbId', tmdbId)
+        }
+      })
       .leftJoin('mediaItem', 'mediaItem.id', 'listItem.mediaItemId')
       .leftJoin('season', 'season.id', 'listItem.seasonId')
       .leftJoin('episode', 'episode.id', 'listItem.episodeId')
@@ -865,269 +900,386 @@ class ListRepository extends repository<List>({
               'mediaItemUpcomingEpisodeHelper.seasonAndEpisodeNumber'
             )
       )
-      .orderBy('listItem.id', 'asc');
 
-    return res.map((listItem) => ({
-      id: Number(listItem['listItem.id']),
-      listedAt: new Date(listItem['listItem.addedAt']).toISOString(),
-      type: listItem['listItem.seasonId']
-        ? 'season'
-        : listItem['listItem.episodeId']
+    switch (orderBy) {
+      case 'title':
+        query.orderBy('mediaItem.title', sortOrder ?? 'asc');
+        break;
+
+      case 'releaseDate':
+        query.orderBy('mediaItem.releaseDate', sortOrder ?? 'asc');
+        query.orderBy('mediaItem.title', 'asc');
+        break;
+
+      case 'listedAt':
+        query.orderBy('listItem.addedAt', sortOrder ?? 'asc');
+        query.orderBy('mediaItem.title', 'asc');
+        break;
+
+      case 'random':
+        query.orderByRaw('random()');
+        break;
+
+      default:
+        query.orderBy('listItem.id', 'asc');
+    }
+
+    if (page) {
+      const itemsPerPage = limit ?? 15;
+
+      const sqlCountQuery = query
+        .clone()
+        .clearOrder()
+        .clearSelect()
+        .count('*', { as: 'count' })
+        .first();
+
+      const skip = itemsPerPage * (page - 1);
+      const take = itemsPerPage;
+      const sqlPaginationQuery = query
+        .clone()
+        .limit(take)
+        .offset(skip);
+
+      const [itemsCount, pagedItems] = await Database.knex.transaction(async (trx) => {
+        const itemsCount = await sqlCountQuery.transacting(trx);
+        const pagedItems = await sqlPaginationQuery.transacting(trx);
+
+        return [itemsCount, pagedItems];
+      });
+
+      const total = Number(itemsCount.count);
+      const from = itemsPerPage * (page - 1);
+      const to = Math.min(total, itemsPerPage * page);
+      const totalPages = Math.ceil(total / itemsPerPage);
+
+      if (from > total) {
+        throw new Error('Invalid page number');
+      }
+
+      const list = pagedItems.map(mapRawResult);
+
+      return {
+        from: from,
+        to: to,
+        data: list,
+        total: total,
+        page: page,
+        totalPages: totalPages,
+      };
+    } else {
+      const list = await query;
+
+      return list.map(mapRawResult);
+    }
+  }
+
+  public async getItem(args: {
+    userId: number;
+    mediaType: MediaType;
+    listId?: number;
+    id?: number;
+    tmdbId?: number;
+  }): Promise<ListItemExtended> {
+    const { userId, mediaType, listId, id, tmdbId } = args;
+
+    return await Database.knex<ListItemExtended>('listItem')
+      .select(
+        'listItem.id',
+        'listItem.listId',
+        'listItem.mediaItemId',
+        'listItem.seasonId',
+        'listItem.episodeId',
+        'listItem.addedAt',
+        'listItem.type',
+        'mediaItem.mediaType',
+        'mediaItem.tmdbId',
+      )
+      .innerJoin('list', 'list.id', 'listItem.listId')
+      .innerJoin('mediaItem', 'mediaItem.id', 'listItem.mediaItemId')
+      .where('list.userId', userId)
+      .where((qb) => {
+        if (listId) {
+          qb.where('listItem.listId', listId)
+        } else {
+          qb.where('list.isWatchlist', true)
+        }
+      })
+      .where('mediaItem.mediaType', mediaType)
+      .where((qb) => {
+        if (id) {
+          qb.where('mediaItem.id', id)
+        }
+        if (tmdbId) {
+          qb.where('mediaItem.tmdbId', tmdbId)
+        }
+      })
+      .first()
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapRawResult = (listItem: any): ListItemsResponse => {
+  return {
+    id: Number(listItem['listItem.id']),
+    listedAt: new Date(listItem['listItem.addedAt']).toISOString(),
+    type: listItem['listItem.seasonId']
+      ? 'season'
+      : listItem['listItem.episodeId']
         ? 'episode'
         : listItem['mediaItem.mediaType'],
-      mediaItem: {
-        airedEpisodesCount: listItem['mediaItem.airedEpisodesCount'],
-        backdrop: listItem['mediaItem.backdropId']
-          ? `/img/${listItem['mediaItem.backdropId']}`
-          : undefined,
-        genres: listItem['mediaItem.genres']?.split(',')?.sort(),
-        id: listItem['listItem.mediaItemId'],
-        imdbId: listItem['mediaItem.imdbId'],
-        lastTimeUpdated: listItem['mediaItem.lastTimeUpdated'],
-        mediaType: listItem['mediaItem.mediaType'],
-        network: listItem['mediaItem.network'],
-        overview: listItem['mediaItem.overview'],
-        poster: listItem['mediaItem.posterId']
-          ? `/img/${listItem['mediaItem.posterId']}`
-          : undefined,
-        posterSmall: listItem['mediaItem.posterId']
-          ? `/img/${listItem['mediaItem.posterId']}?size=small`
-          : undefined,
-        releaseDate: listItem['mediaItem.releaseDate'],
-        runtime: listItem['mediaItem.runtime'] || null,
-        source: listItem['mediaItem.source'],
-        progress: listItem['mediaItem.progress'],
-        status: listItem['mediaItem.status']?.toLowerCase(),
-        title: listItem['mediaItem.title'],
-        tmdbId: listItem['mediaItem.tmdbId'],
-        traktId: listItem['mediaItem.traktId'],
-        tvdbId: listItem['mediaItem.tvdbId'],
-        url: listItem['mediaItem.url'],
-        userRating: listItem['mediaItem.userRating.rating']
-          ? {
-              mediaItemId: listItem['listItem.mediaItemId'],
-              date: listItem['mediaItem.userRating.date'],
-              rating: listItem['mediaItem.userRating.rating'],
-              userId: userId,
-            }
-          : undefined,
-        lastSeenAt: listItem['mediaItem.lastSeenAt'],
-        totalRuntime:
-          (listItem['mediaItem.mediaType'] === 'tv'
-            ? listItem['mediaItem.totalRuntime']
-            : listItem['mediaItem.runtime']) || null,
-        seen:
-          listItem['mediaItem.mediaType'] === 'tv'
-            ? listItem['mediaItem.airedEpisodesCount'] -
-                listItem['mediaItem.seenEpisodesCount'] ===
-              0
-            : Boolean(listItem['mediaItem.lastSeen.mediaItemId']),
-        seenEpisodesCount: listItem['mediaItem.seenEpisodesCount'],
-        unseenEpisodesCount:
-          listItem['mediaItem.mediaType'] === 'tv' &&
+    mediaItem: {
+      airedEpisodesCount: listItem['mediaItem.airedEpisodesCount'],
+      backdrop: listItem['mediaItem.backdropId']
+        ? `/img/${listItem['mediaItem.backdropId']}`
+        : undefined,
+      genres: listItem['mediaItem.genres']?.split(',')?.sort(),
+      id: listItem['listItem.mediaItemId'],
+      imdbId: listItem['mediaItem.imdbId'],
+      lastTimeUpdated: listItem['mediaItem.lastTimeUpdated'],
+      mediaType: listItem['mediaItem.mediaType'],
+      network: listItem['mediaItem.network'],
+      overview: listItem['mediaItem.overview'],
+      poster: listItem['mediaItem.posterId']
+        ? `/img/${listItem['mediaItem.posterId']}`
+        : undefined,
+      posterSmall: listItem['mediaItem.posterId']
+        ? `/img/${listItem['mediaItem.posterId']}?size=small`
+        : undefined,
+      releaseDate: listItem['mediaItem.releaseDate'],
+      runtime: listItem['mediaItem.runtime'] || null,
+      source: listItem['mediaItem.source'],
+      progress: listItem['mediaItem.progress'],
+      status: listItem['mediaItem.status']?.toLowerCase(),
+      title: listItem['mediaItem.title'],
+      tmdbId: listItem['mediaItem.tmdbId'],
+      traktId: listItem['mediaItem.traktId'],
+      tvdbId: listItem['mediaItem.tvdbId'],
+      url: listItem['mediaItem.url'],
+      userRating: listItem['mediaItem.userRating.rating']
+        ? {
+          mediaItemId: listItem['listItem.mediaItemId'],
+          date: listItem['mediaItem.userRating.date'],
+          rating: listItem['mediaItem.userRating.rating'],
+          userId: listItem['mediaItem.userRating.userId'],
+        }
+        : undefined,
+      lastSeenAt: listItem['mediaItem.lastSeenAt'],
+      totalRuntime:
+        (listItem['mediaItem.mediaType'] === 'tv'
+          ? listItem['mediaItem.totalRuntime']
+          : listItem['mediaItem.runtime']) || null,
+      seen:
+        listItem['mediaItem.mediaType'] === 'tv'
+          ? listItem['mediaItem.airedEpisodesCount'] -
+          listItem['mediaItem.seenEpisodesCount'] ===
+          0
+          : Boolean(listItem['mediaItem.lastSeen.mediaItemId']),
+      seenEpisodesCount: listItem['mediaItem.seenEpisodesCount'],
+      unseenEpisodesCount:
+        listItem['mediaItem.mediaType'] === 'tv' &&
           listItem['mediaItem.airedEpisodesCount']
-            ? listItem['mediaItem.airedEpisodesCount'] -
-              listItem['mediaItem.seenEpisodesCount']
+          ? listItem['mediaItem.airedEpisodesCount'] -
+          listItem['mediaItem.seenEpisodesCount']
+          : undefined,
+      onWatchlist: Boolean(listItem['mediaItem.watchlist.id']),
+      firstUnwatchedEpisode:
+        listItem['mediaItem.firstUnwatchedEpisode.id'] !== null
+          ? {
+            description:
+              listItem['mediaItem.firstUnwatchedEpisode.description'],
+            episodeNumber:
+              listItem['mediaItem.firstUnwatchedEpisode.episodeNumber'],
+            id: listItem['mediaItem.firstUnwatchedEpisode.id'],
+            imdbId: listItem['mediaItem.firstUnwatchedEpisode.imdbId'],
+            isSpecialEpisode: Boolean(
+              listItem['mediaItem.firstUnwatchedEpisode.isSpecialEpisode']
+            ),
+            releaseDate:
+              listItem['mediaItem.firstUnwatchedEpisode.releaseDate'],
+            runtime:
+              listItem['mediaItem.firstUnwatchedEpisode.runtime'] || null,
+            seasonId: listItem['mediaItem.firstUnwatchedEpisode.seasonId'],
+            seasonNumber:
+              listItem['mediaItem.firstUnwatchedEpisode.seasonNumber'],
+            title: listItem['mediaItem.firstUnwatchedEpisode.title'],
+            tmdbId: listItem['mediaItem.firstUnwatchedEpisode.tmdbId'],
+            traktId: listItem['mediaItem.firstUnwatchedEpisode.traktId'],
+            tvdbId: listItem['mediaItem.firstUnwatchedEpisode.tvdbId'],
+            tvShowId: listItem['listItem.mediaItemId'],
+          }
+          : undefined,
+      lastAiredEpisode:
+        listItem['mediaItem.lastAiredEpisode.id'] !== null
+          ? {
+            description: listItem['mediaItem.lastAiredEpisode.description'],
+            episodeNumber:
+              listItem['mediaItem.lastAiredEpisode.episodeNumber'],
+            id: listItem['mediaItem.lastAiredEpisode.id'],
+            imdbId: listItem['mediaItem.lastAiredEpisode.imdbId'],
+            isSpecialEpisode: Boolean(
+              listItem['mediaItem.lastAiredEpisode.isSpecialEpisode']
+            ),
+            releaseDate: listItem['mediaItem.lastAiredEpisode.releaseDate'],
+            runtime: listItem['mediaItem.lastAiredEpisode.runtime'] || null,
+            seasonId: listItem['mediaItem.lastAiredEpisode.seasonId'],
+            seasonNumber:
+              listItem['mediaItem.lastAiredEpisode.seasonNumber'],
+            title: listItem['mediaItem.lastAiredEpisode.title'],
+            tmdbId: listItem['mediaItem.lastAiredEpisode.tmdbId'],
+            traktId: listItem['mediaItem.lastAiredEpisode.traktId'],
+            tvdbId: listItem['mediaItem.lastAiredEpisode.tvdbId'],
+            tvShowId: listItem['listItem.mediaItemId'],
+          }
+          : undefined,
+      upcomingEpisode:
+        listItem['mediaItem.upcomingEpisode.id'] !== null
+          ? {
+            description: listItem['mediaItem.upcomingEpisode.description'],
+            episodeNumber:
+              listItem['mediaItem.upcomingEpisode.episodeNumber'],
+            id: listItem['mediaItem.upcomingEpisode.id'],
+            imdbId: listItem['mediaItem.upcomingEpisode.imdbId'],
+            isSpecialEpisode: Boolean(
+              listItem['mediaItem.upcomingEpisode.isSpecialEpisode']
+            ),
+            releaseDate: listItem['mediaItem.upcomingEpisode.releaseDate'],
+            runtime: listItem['mediaItem.upcomingEpisode.runtime'] || null,
+            seasonId: listItem['mediaItem.upcomingEpisode.seasonId'],
+            seasonNumber:
+              listItem['mediaItem.upcomingEpisode.seasonNumber'],
+            title: listItem['mediaItem.upcomingEpisode.title'],
+            tmdbId: listItem['mediaItem.upcomingEpisode.tmdbId'],
+            traktId: listItem['mediaItem.upcomingEpisode.traktId'],
+            tvdbId: listItem['mediaItem.upcomingEpisode.tvdbId'],
+            tvShowId: listItem['listItem.mediaItemId'],
+          }
+          : undefined,
+    },
+    ...(listItem['listItem.seasonId']
+      ? {
+        season: {
+          id: listItem['listItem.seasonId'],
+          isSpecialSeason: Boolean(listItem['season.isSpecialSeason']),
+          airedEpisodesCount: listItem['season.airedEpisodesCount'],
+          seenEpisodesCount: listItem['season.seenEpisodesCount'],
+          unseenEpisodesCount: listItem['season.airedEpisodesCount']
+            ? listItem['season.airedEpisodesCount'] -
+            listItem['season.seenEpisodesCount']
             : undefined,
-        onWatchlist: Boolean(listItem['mediaItem.watchlist.id']),
-        firstUnwatchedEpisode:
-          listItem['mediaItem.firstUnwatchedEpisode.id'] !== null
+          seen:
+            listItem['season.airedEpisodesCount'] -
+            listItem['season.seenEpisodesCount'] ===
+            0,
+          releaseDate: listItem['season.releaseDate'],
+          seasonNumber: listItem['season.seasonNumber'],
+          title: listItem['season.title'],
+          tmdbId: listItem['season.tmdbId'],
+          traktId: listItem['season.traktId'],
+          tvdbId: listItem['season.tvdbId'],
+          tvShowId: listItem['listItem.mediaItemId'],
+          totalRuntime: listItem['season.totalRuntime'] || null,
+          userRating: listItem['season.userRating.rating']
             ? {
+              mediaItemId: listItem['listItem.mediaItemId'],
+              seasonId: listItem['listItem.seasonId'],
+              date: listItem['season.userRating.date'],
+              rating: listItem['season.userRating.rating'],
+              userId: listItem['season.userRating.userId'],
+            }
+            : undefined,
+          onWatchlist: Boolean(listItem['season.watchlist.id']),
+          lastSeenAt: listItem['season.lastSeenAt'],
+          firstUnwatchedEpisode: listItem[
+            'season.firstUnwatchedEpisode.episodeNumber'
+          ]
+            ? {
+              description:
+                listItem['season.firstUnwatchedEpisode.description'],
+              episodeNumber:
+                listItem['season.firstUnwatchedEpisode.episodeNumber'],
+              id: listItem['season.firstUnwatchedEpisode.id'],
+              imdbId: listItem['season.firstUnwatchedEpisode.imdbId'],
+              isSpecialEpisode: Boolean(
+                listItem['season.firstUnwatchedEpisode.isSpecialEpisode']
+              ),
+              releaseDate:
+                listItem['season.firstUnwatchedEpisode.releaseDate'],
+              runtime:
+                listItem['season.firstUnwatchedEpisode.runtime'] || null,
+              seasonId: listItem['season.firstUnwatchedEpisode.seasonId'],
+              seasonNumber:
+                listItem['season.firstUnwatchedEpisode.seasonNumber'],
+              title: listItem['season.firstUnwatchedEpisode.title'],
+              tmdbId: listItem['season.firstUnwatchedEpisode.tmdbId'],
+              traktId: listItem['season.firstUnwatchedEpisode.traktId'],
+              tvdbId: listItem['season.firstUnwatchedEpisode.tvdbId'],
+              tvShowId: listItem['season.firstUnwatchedEpisode.tvShowId'],
+            }
+            : undefined,
+          lastAiredEpisode:
+            listItem['season.lastAiredEpisode.id'] !== null
+              ? {
                 description:
-                  listItem['mediaItem.firstUnwatchedEpisode.description'],
+                  listItem['season.lastAiredEpisode.description'],
                 episodeNumber:
-                  listItem['mediaItem.firstUnwatchedEpisode.episodeNumber'],
-                id: listItem['mediaItem.firstUnwatchedEpisode.id'],
-                imdbId: listItem['mediaItem.firstUnwatchedEpisode.imdbId'],
+                  listItem['season.lastAiredEpisode.episodeNumber'],
+                id: listItem['season.lastAiredEpisode.id'],
+                imdbId: listItem['season.lastAiredEpisode.imdbId'],
                 isSpecialEpisode: Boolean(
-                  listItem['mediaItem.firstUnwatchedEpisode.isSpecialEpisode']
+                  listItem['season.lastAiredEpisode.isSpecialEpisode']
                 ),
                 releaseDate:
-                  listItem['mediaItem.firstUnwatchedEpisode.releaseDate'],
+                  listItem['season.lastAiredEpisode.releaseDate'],
                 runtime:
-                  listItem['mediaItem.firstUnwatchedEpisode.runtime'] || null,
-                seasonId: listItem['mediaItem.firstUnwatchedEpisode.seasonId'],
+                  listItem['season.lastAiredEpisode.runtime'] || null,
+                seasonId: listItem['season.lastAiredEpisode.seasonId'],
                 seasonNumber:
-                  listItem['mediaItem.firstUnwatchedEpisode.seasonNumber'],
-                title: listItem['mediaItem.firstUnwatchedEpisode.title'],
-                tmdbId: listItem['mediaItem.firstUnwatchedEpisode.tmdbId'],
-                traktId: listItem['mediaItem.firstUnwatchedEpisode.traktId'],
-                tvdbId: listItem['mediaItem.firstUnwatchedEpisode.tvdbId'],
+                  listItem['season.lastAiredEpisode.seasonNumber'],
+                title: listItem['season.lastAiredEpisode.title'],
+                tmdbId: listItem['season.lastAiredEpisode.tmdbId'],
+                traktId: listItem['season.lastAiredEpisode.traktId'],
+                tvdbId: listItem['season.lastAiredEpisode.tvdbId'],
                 tvShowId: listItem['listItem.mediaItemId'],
               }
-            : undefined,
-        lastAiredEpisode:
-          listItem['mediaItem.lastAiredEpisode.id'] !== null
+              : undefined,
+        },
+      }
+      : undefined),
+    ...(listItem['listItem.episodeId']
+      ? {
+        episode: {
+          episodeNumber: listItem['episode.episodeNumber'],
+          id: listItem['listItem.episodeId'],
+          imdbId: listItem['episode.imdbId'],
+          isSpecialEpisode: Boolean(listItem['episode.isSpecialEpisode']),
+          releaseDate: listItem['episode.releaseDate'],
+          seasonNumber: listItem['episode.seasonNumber'],
+          title: listItem['episode.title'],
+          tmdbId: listItem['episode.tmdbId'],
+          traktId: listItem['episode.traktId'],
+          tvdbId: listItem['episode.tvdbId'],
+          tvShowId: listItem['listItem.mediaItemId'],
+          seasonAndEpisodeNumber:
+            listItem['episode.seasonAndEpisodeNumber'],
+          progress: listItem['episode.progress'],
+          runtime: listItem['episode.runtime'] || null,
+          userRating: listItem['episode.userRating.rating']
             ? {
-                description: listItem['mediaItem.lastAiredEpisode.description'],
-                episodeNumber:
-                  listItem['mediaItem.lastAiredEpisode.episodeNumber'],
-                id: listItem['mediaItem.lastAiredEpisode.id'],
-                imdbId: listItem['mediaItem.lastAiredEpisode.imdbId'],
-                isSpecialEpisode: Boolean(
-                  listItem['mediaItem.lastAiredEpisode.isSpecialEpisode']
-                ),
-                releaseDate: listItem['mediaItem.lastAiredEpisode.releaseDate'],
-                runtime: listItem['mediaItem.lastAiredEpisode.runtime'] || null,
-                seasonId: listItem['mediaItem.lastAiredEpisode.seasonId'],
-                seasonNumber:
-                  listItem['mediaItem.lastAiredEpisode.seasonNumber'],
-                title: listItem['mediaItem.lastAiredEpisode.title'],
-                tmdbId: listItem['mediaItem.lastAiredEpisode.tmdbId'],
-                traktId: listItem['mediaItem.lastAiredEpisode.traktId'],
-                tvdbId: listItem['mediaItem.lastAiredEpisode.tvdbId'],
-                tvShowId: listItem['listItem.mediaItemId'],
-              }
+              mediaItemId: listItem['listItem.mediaItemId'],
+              episodeId: listItem['listItem.episodeId'],
+              date: listItem['episode.userRating.date'],
+              rating: listItem['episode.userRating.rating'],
+              userId: listItem['episode.userRating.userId'],
+            }
             : undefined,
-        upcomingEpisode:
-          listItem['mediaItem.upcomingEpisode.id'] !== null
-            ? {
-                description: listItem['mediaItem.upcomingEpisode.description'],
-                episodeNumber:
-                  listItem['mediaItem.upcomingEpisode.episodeNumber'],
-                id: listItem['mediaItem.upcomingEpisode.id'],
-                imdbId: listItem['mediaItem.upcomingEpisode.imdbId'],
-                isSpecialEpisode: Boolean(
-                  listItem['mediaItem.upcomingEpisode.isSpecialEpisode']
-                ),
-                releaseDate: listItem['mediaItem.upcomingEpisode.releaseDate'],
-                runtime: listItem['mediaItem.upcomingEpisode.runtime'] || null,
-                seasonId: listItem['mediaItem.upcomingEpisode.seasonId'],
-                seasonNumber:
-                  listItem['mediaItem.upcomingEpisode.seasonNumber'],
-                title: listItem['mediaItem.upcomingEpisode.title'],
-                tmdbId: listItem['mediaItem.upcomingEpisode.tmdbId'],
-                traktId: listItem['mediaItem.upcomingEpisode.traktId'],
-                tvdbId: listItem['mediaItem.upcomingEpisode.tvdbId'],
-                tvShowId: listItem['listItem.mediaItemId'],
-              }
-            : undefined,
-      },
-      ...(listItem['listItem.seasonId']
-        ? {
-            season: {
-              id: listItem['listItem.seasonId'],
-              isSpecialSeason: Boolean(listItem['season.isSpecialSeason']),
-              airedEpisodesCount: listItem['season.airedEpisodesCount'],
-              seenEpisodesCount: listItem['season.seenEpisodesCount'],
-              unseenEpisodesCount: listItem['season.airedEpisodesCount']
-                ? listItem['season.airedEpisodesCount'] -
-                  listItem['season.seenEpisodesCount']
-                : undefined,
-              seen:
-                listItem['season.airedEpisodesCount'] -
-                  listItem['season.seenEpisodesCount'] ===
-                0,
-              releaseDate: listItem['season.releaseDate'],
-              seasonNumber: listItem['season.seasonNumber'],
-              title: listItem['season.title'],
-              tmdbId: listItem['season.tmdbId'],
-              traktId: listItem['season.traktId'],
-              tvdbId: listItem['season.tvdbId'],
-              tvShowId: listItem['listItem.mediaItemId'],
-              totalRuntime: listItem['season.totalRuntime'] || null,
-              userRating: listItem['season.userRating.rating']
-                ? {
-                    mediaItemId: listItem['listItem.mediaItemId'],
-                    seasonId: listItem['listItem.seasonId'],
-                    date: listItem['season.userRating.date'],
-                    rating: listItem['season.userRating.rating'],
-                    userId: userId,
-                  }
-                : undefined,
-              onWatchlist: Boolean(listItem['season.watchlist.id']),
-              lastSeenAt: listItem['season.lastSeenAt'],
-              firstUnwatchedEpisode: listItem[
-                'season.firstUnwatchedEpisode.episodeNumber'
-              ]
-                ? {
-                    description:
-                      listItem['season.firstUnwatchedEpisode.description'],
-                    episodeNumber:
-                      listItem['season.firstUnwatchedEpisode.episodeNumber'],
-                    id: listItem['season.firstUnwatchedEpisode.id'],
-                    imdbId: listItem['season.firstUnwatchedEpisode.imdbId'],
-                    isSpecialEpisode: Boolean(
-                      listItem['season.firstUnwatchedEpisode.isSpecialEpisode']
-                    ),
-                    releaseDate:
-                      listItem['season.firstUnwatchedEpisode.releaseDate'],
-                    runtime:
-                      listItem['season.firstUnwatchedEpisode.runtime'] || null,
-                    seasonId: listItem['season.firstUnwatchedEpisode.seasonId'],
-                    seasonNumber:
-                      listItem['season.firstUnwatchedEpisode.seasonNumber'],
-                    title: listItem['season.firstUnwatchedEpisode.title'],
-                    tmdbId: listItem['season.firstUnwatchedEpisode.tmdbId'],
-                    traktId: listItem['season.firstUnwatchedEpisode.traktId'],
-                    tvdbId: listItem['season.firstUnwatchedEpisode.tvdbId'],
-                    tvShowId: listItem['season.firstUnwatchedEpisode.tvShowId'],
-                  }
-                : undefined,
-              lastAiredEpisode:
-                listItem['season.lastAiredEpisode.id'] !== null
-                  ? {
-                      description:
-                        listItem['season.lastAiredEpisode.description'],
-                      episodeNumber:
-                        listItem['season.lastAiredEpisode.episodeNumber'],
-                      id: listItem['season.lastAiredEpisode.id'],
-                      imdbId: listItem['season.lastAiredEpisode.imdbId'],
-                      isSpecialEpisode: Boolean(
-                        listItem['season.lastAiredEpisode.isSpecialEpisode']
-                      ),
-                      releaseDate:
-                        listItem['season.lastAiredEpisode.releaseDate'],
-                      runtime:
-                        listItem['season.lastAiredEpisode.runtime'] || null,
-                      seasonId: listItem['season.lastAiredEpisode.seasonId'],
-                      seasonNumber:
-                        listItem['season.lastAiredEpisode.seasonNumber'],
-                      title: listItem['season.lastAiredEpisode.title'],
-                      tmdbId: listItem['season.lastAiredEpisode.tmdbId'],
-                      traktId: listItem['season.lastAiredEpisode.traktId'],
-                      tvdbId: listItem['season.lastAiredEpisode.tvdbId'],
-                      tvShowId: listItem['listItem.mediaItemId'],
-                    }
-                  : undefined,
-            },
-          }
-        : {}),
-      ...(listItem['listItem.episodeId']
-        ? {
-            episode: {
-              episodeNumber: listItem['episode.episodeNumber'],
-              id: listItem['listItem.episodeId'],
-              imdbId: listItem['episode.imdbId'],
-              isSpecialEpisode: Boolean(listItem['episode.isSpecialEpisode']),
-              releaseDate: listItem['episode.releaseDate'],
-              seasonNumber: listItem['episode.seasonNumber'],
-              title: listItem['episode.title'],
-              tmdbId: listItem['episode.tmdbId'],
-              traktId: listItem['episode.traktId'],
-              tvdbId: listItem['episode.tvdbId'],
-              tvShowId: listItem['listItem.mediaItemId'],
-              seasonAndEpisodeNumber:
-                listItem['episode.seasonAndEpisodeNumber'],
-              progress: listItem['episode.progress'],
-              runtime: listItem['episode.runtime'] || null,
-              userRating: listItem['episode.userRating.rating']
-                ? {
-                    mediaItemId: listItem['listItem.mediaItemId'],
-                    episodeId: listItem['listItem.episodeId'],
-                    date: listItem['episode.userRating.date'],
-                    rating: listItem['episode.userRating.rating'],
-                    userId: userId,
-                  }
-                : undefined,
-              onWatchlist: Boolean(listItem['episode.watchlist.id']),
-              lastSeenAt: listItem['episode.lastSeenAt'],
-              seen: Boolean(listItem['episode.lastSeenAt']),
-            },
-          }
-        : {}),
-    }));
-  }
+          onWatchlist: Boolean(listItem['episode.watchlist.id']),
+          lastSeenAt: listItem['episode.lastSeenAt'],
+          seen: Boolean(listItem['episode.lastSeenAt']),
+        },
+      }
+      : undefined),
+  } as unknown as ListItemsResponse;
 }
 
 export const listRepository = new ListRepository();
