@@ -47,6 +47,28 @@
               "type": "string",
               "nullable": true
             }
+          },
+          {
+            "name": "includeAllLists",
+            "in": "query",
+            "description": "Include items from all lists",
+            "required": false,
+            "schema": {
+              "description": "Include items from all lists",
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "simple",
+            "in": "query",
+            "description": "Simple calendar (does not support standalone seasons or episodes present on lists)",
+            "required": false,
+            "schema": {
+              "description": "Simple calendar (does not support standalone seasons or episodes present on lists)",
+              "type": "boolean",
+              "nullable": true
+            }
           }
         ],
         "responses": {
@@ -55,7 +77,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GetCalendarItemsResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/GetCalendarItemsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GetSimpleCalendarItemsResponse"
+                    }
+                  ]
                 }
               }
             }
@@ -283,6 +312,44 @@
         }
       }
     },
+    "/api/details": {
+      "get": {
+        "tags": [
+          "MediaItem"
+        ],
+        "operationId": "getByExternalId",
+        "parameters": [
+          {
+            "name": "mediaType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MediaType"
+            }
+          },
+          {
+            "name": "tmdbId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItemDetailsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/details/update-metadata/{mediaItemId}": {
       "get": {
         "tags": [
@@ -418,7 +485,34 @@
             }
           },
           {
+            "name": "onlyUnseenItems",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "includeUnreleasedItems",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
             "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
             "in": "query",
             "required": false,
             "schema": {
@@ -597,6 +691,24 @@
           },
           {
             "name": "onlyWithProgress",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "onlyUnseenItems",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "includeUnreleasedItems",
             "in": "query",
             "required": false,
             "schema": {
@@ -826,6 +938,72 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                }
+              ],
+              "nullable": true
+            }
+          },
+          {
+            "name": "tmdbId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "orderBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MediaItemOrderBy"
+                }
+              ],
+              "nullable": true
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/SortOrder"
+                }
+              ],
+              "nullable": true
+            }
           }
         ],
         "responses": {
@@ -834,7 +1012,48 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListItemsResponse"
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ListItemsResponse"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ListItemsResponse"
+                          }
+                        },
+                        "page": {
+                          "type": "number"
+                        },
+                        "totalPages": {
+                          "type": "number"
+                        },
+                        "from": {
+                          "type": "number"
+                        },
+                        "to": {
+                          "type": "number"
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "from",
+                        "page",
+                        "to",
+                        "total",
+                        "totalPages"
+                      ]
+                    }
+                  ]
                 }
               }
             }
@@ -936,6 +1155,50 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/text": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/list-item/by-external-id": {
+      "put": {
+        "tags": [
+          "List Item"
+        ],
+        "operationId": "addByExternalId",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "listId": {
+                    "type": "number"
+                  },
+                  "mediaType": {
+                    "$ref": "#/components/schemas/MediaType"
+                  },
+                  "id": {
+                    "$ref": "#/components/schemas/ExternalIds"
+                  }
+                },
+                "required": [
+                  "id",
+                  "listId",
+                  "mediaType"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "",
@@ -1541,6 +1804,175 @@
             "content": {
               "application/text": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "description": "Get all seen items",
+        "tags": [
+          "Seen"
+        ],
+        "operationId": "get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "extended",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "mediaType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MediaType"
+                }
+              ],
+              "nullable": true
+            }
+          },
+          {
+            "name": "tmdbId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "seasonNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "episodeNumber",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Seen"
+                      }
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SeenExtended"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Seen"
+                          }
+                        },
+                        "page": {
+                          "type": "number"
+                        },
+                        "totalPages": {
+                          "type": "number"
+                        },
+                        "from": {
+                          "type": "number"
+                        },
+                        "to": {
+                          "type": "number"
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "from",
+                        "page",
+                        "to",
+                        "total",
+                        "totalPages"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SeenExtended"
+                          }
+                        },
+                        "page": {
+                          "type": "number"
+                        },
+                        "totalPages": {
+                          "type": "number"
+                        },
+                        "from": {
+                          "type": "number"
+                        },
+                        "to": {
+                          "type": "number"
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "data",
+                        "from",
+                        "page",
+                        "to",
+                        "total",
+                        "totalPages"
+                      ]
+                    }
+                  ]
+                }
               }
             }
           }
@@ -2315,6 +2747,83 @@
         }
       }
     },
+    "/api/watchlist/by-external-id": {
+      "put": {
+        "tags": [
+          "Watchlist"
+        ],
+        "operationId": "addByExternalId",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mediaType": {
+                    "$ref": "#/components/schemas/MediaType"
+                  },
+                  "id": {
+                    "$ref": "#/components/schemas/ExternalIds"
+                  }
+                },
+                "required": [
+                  "id",
+                  "mediaType"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/text": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "description": "Get watchlist item by external id",
+        "tags": [
+          "Watchlist"
+        ],
+        "operationId": "getByExternalId",
+        "parameters": [
+          {
+            "name": "mediaType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MediaType"
+            }
+          },
+          {
+            "name": "tmdbId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListItemExtended"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/import-goodreads": {
       "post": {
         "tags": [
@@ -2561,6 +3070,9 @@
                 "mediaType": {
                   "$ref": "#/components/schemas/MediaType"
                 },
+                "tmdbId": {
+                  "type": "number"
+                },
                 "seen": {
                   "type": "boolean",
                   "nullable": true
@@ -2570,7 +3082,8 @@
                 "id",
                 "mediaType",
                 "releaseDate",
-                "title"
+                "title",
+                "tmdbId"
               ]
             },
             "episode": {
@@ -2625,6 +3138,80 @@
           "video_game"
         ],
         "type": "string"
+      },
+      "GetSimpleCalendarItemsResponse": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "releaseDate": {
+              "type": "string"
+            },
+            "mediaItem": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "mediaType": {
+                  "$ref": "#/components/schemas/MediaType"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "releaseDate": {
+                  "type": "string"
+                },
+                "tmdbId": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "mediaType",
+                "releaseDate",
+                "title",
+                "tmdbId"
+              ]
+            },
+            "episode": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "seasonNumber": {
+                  "type": "number"
+                },
+                "episodeNumber": {
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "releaseDate": {
+                  "type": "string"
+                },
+                "isSpecialEpisode": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "episodeNumber",
+                "id",
+                "isSpecialEpisode",
+                "releaseDate",
+                "seasonNumber",
+                "title"
+              ]
+            }
+          },
+          "required": [
+            "episode",
+            "mediaItem",
+            "releaseDate"
+          ]
+        }
       },
       "TmdbLang": {
         "enum": [
@@ -3784,7 +4371,19 @@
                 "type": "boolean",
                 "nullable": true
               },
+              "onlyUnseenItems": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "includeUnreleasedItems": {
+                "type": "boolean",
+                "nullable": true
+              },
               "page": {
+                "type": "number",
+                "nullable": true
+              },
+              "limit": {
                 "type": "number",
                 "nullable": true
               }
@@ -3807,15 +4406,10 @@
       },
       "MediaItemOrderBy": {
         "enum": [
-          "lastAiring",
-          "lastSeen",
-          "mediaType",
-          "nextAiring",
-          "progress",
+          "listedAt",
+          "random",
           "releaseDate",
-          "status",
-          "title",
-          "unseenEpisodes"
+          "title"
         ],
         "type": "string"
       },
@@ -3833,9 +4427,6 @@
             "properties": {
               "id": {
                 "type": "number"
-              },
-              "isWatchlist": {
-                "type": "boolean"
               },
               "name": {
                 "type": "string"
@@ -3880,6 +4471,9 @@
               "displayNumbers": {
                 "type": "boolean",
                 "nullable": true
+              },
+              "isWatchlist": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -3921,54 +4515,92 @@
         ]
       },
       "ListItemsResponse": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "number"
-            },
-            "listedAt": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "audiobook",
-                "book",
-                "episode",
-                "movie",
-                "season",
-                "tv",
-                "video_game"
-              ],
-              "type": "string"
-            },
-            "mediaItem": {
-              "$ref": "#/components/schemas/MediaItemItemsResponse"
-            },
-            "season": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/TvSeason"
-                }
-              ],
-              "nullable": true
-            },
-            "episode": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/TvEpisode"
-                }
-              ],
-              "nullable": true
-            }
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
           },
-          "required": [
-            "id",
-            "listedAt",
-            "mediaItem",
-            "type"
-          ]
+          "listedAt": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "audiobook",
+              "book",
+              "episode",
+              "movie",
+              "season",
+              "tv",
+              "video_game"
+            ],
+            "type": "string"
+          },
+          "mediaItem": {
+            "$ref": "#/components/schemas/MediaItemItemsResponse"
+          },
+          "season": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TvSeason"
+              }
+            ],
+            "nullable": true
+          },
+          "episode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TvEpisode"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "listedAt",
+          "mediaItem",
+          "type"
+        ]
+      },
+      "ExternalIds": {
+        "type": "object",
+        "properties": {
+          "tmdbId": {
+            "type": "number",
+            "nullable": true
+          },
+          "imdbId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tvdbId": {
+            "type": "number",
+            "nullable": true
+          },
+          "tvmazeId": {
+            "type": "number",
+            "nullable": true
+          },
+          "igdbId": {
+            "type": "number",
+            "nullable": true
+          },
+          "openlibraryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "audibleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "traktId": {
+            "type": "number",
+            "nullable": true
+          },
+          "goodreadsId": {
+            "type": "number",
+            "nullable": true
+          }
         }
       },
       "ListsResponse": {
@@ -3984,9 +4616,6 @@
             "properties": {
               "id": {
                 "type": "number"
-              },
-              "isWatchlist": {
-                "type": "boolean"
               },
               "name": {
                 "type": "string"
@@ -4031,6 +4660,9 @@
               "displayNumbers": {
                 "type": "boolean",
                 "nullable": true
+              },
+              "isWatchlist": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -4363,6 +4995,36 @@
           "unknown"
         ],
         "type": "string"
+      },
+      "SeenExtended": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Seen"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mediaType": {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              "tmdbId": {
+                "type": "number",
+                "nullable": true
+              },
+              "seasonNumber": {
+                "type": "number",
+                "nullable": true
+              },
+              "episodeNumber": {
+                "type": "number",
+                "nullable": true
+              }
+            },
+            "required": [
+              "mediaType"
+            ]
+          }
+        ]
       },
       "StatisticsSummaryResponse": {
         "type": "object",
@@ -4767,6 +5429,59 @@
               "platformName"
             ]
           }
+        ]
+      },
+      "ListItemExtended": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ListItem"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mediaType": {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              "tmdbId": {
+                "type": "number",
+                "nullable": true
+              }
+            },
+            "required": [
+              "mediaType"
+            ]
+          }
+        ]
+      },
+      "ListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "listId": {
+            "type": "number"
+          },
+          "mediaItemId": {
+            "type": "number"
+          },
+          "seasonId": {
+            "type": "number",
+            "nullable": true
+          },
+          "episodeId": {
+            "type": "number",
+            "nullable": true
+          },
+          "addedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "addedAt",
+          "id",
+          "listId",
+          "mediaItemId"
         ]
       },
       "GoodreadsImport": {

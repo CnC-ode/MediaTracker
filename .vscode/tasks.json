@@ -6,7 +6,42 @@
       "script": "dev",
       "path": "client/",
       "problemMatcher": [],
-      "label": "client:dev"
+      "label": "Client start",
+    },
+    {
+      "type": "npm",
+      "script": "build:webpack",
+      "path": "client/",
+      "problemMatcher": [],
+      "label": "Client build",
+    },
+    {
+      "type": "npm",
+      "script": "build",
+      "path": "client/",
+      "problemMatcher": [],
+      "label": "Client build full",
+    },
+    {
+      "type": "npm",
+      "script": "start",
+      "path": "server/",
+      "problemMatcher": [],
+      "label": "Server start",
+    },
+    {
+      "type": "npm",
+      "script": "build:server",
+      "path": "server/",
+      "problemMatcher": [],
+      "label": "Server build",
+    },
+    {
+      "type": "npm",
+      "script": "build",
+      "path": "server/",
+      "problemMatcher": [],
+      "label": "Server build full",
     },
     {
       "type": "npm",

@@ -26,5 +26,7 @@
     "server/build": true,
     "server/public": true,
     "**/package-lock.json": true
-  }
+  },
+  "editor.formatOnSave": true
+
 }

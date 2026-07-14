@@ -5,6 +5,56 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug Client",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:7000",
+      "cwd": "${workspaceRoot}/client",
+      "webRoot": "${workspaceRoot}/client",
+      "sourceMaps": true,
+      "trace": true,
+      "preLaunchTask": "Client start"
+    },
+    {
+      "name": "Debug Server",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "cwd": "${workspaceRoot}/server",
+      "outFiles": ["${workspaceFolder}/server/build/**/*.js"],
+      "program": "${workspaceFolder}/server/build/index.js",
+      "request": "launch",
+      "restart": true,
+      "runtimeExecutable": "nodemon",
+      "skipFiles": [
+        "<node_internals>/**",
+        "${workspaceFolder}/server/node_modules/**"
+      ],
+      "type": "node",
+      "env":{
+        "HOSTNAME": "0.0.0.0"
+      }
+    },
+    {
+      "name": "Build and Debug Server",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "cwd": "${workspaceRoot}/server",
+      "outFiles": ["${workspaceFolder}/server/build/**/*.js"],
+      "program": "${workspaceFolder}/server/build/index.js",
+      "request": "launch",
+      "restart": true,
+      "runtimeExecutable": "nodemon",
+      "skipFiles": [
+        "<node_internals>/**",
+        "${workspaceFolder}/server/node_modules/**"
+      ],
+      "type": "node",
+      "env":{
+        "HOSTNAME": "0.0.0.0"
+      },
+      "preLaunchTask": "Server build"
+    },
+    {
       "name": "server:watch [SQLite]",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
@@ -18,7 +68,10 @@
         "<node_internals>/**",
         "${workspaceFolder}/server/node_modules/**"
       ],
-      "type": "node"
+      "type": "node",
+      "env":{
+        "HOSTNAME": "0.0.0.0"
+      }
     },
     {
       "name": "server:watch [PostgreSQL]",

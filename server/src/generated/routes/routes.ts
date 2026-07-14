@@ -122,6 +122,15 @@ router.get(
           type: ['string', 'null'],
           examples: ['2022-05-21T23:37:36+00:00'],
         },
+        includeAllLists: {
+          description: 'Include items from all lists',
+          type: ['boolean', 'null'],
+        },
+        simple: {
+          description:
+            'Simple calendar (does not support standalone seasons or episodes present on lists)',
+          type: ['boolean', 'null'],
+        },
       },
     },
   }),
@@ -346,6 +355,27 @@ router.get(
   _MediaItemController.details
 );
 router.get(
+  '/api/details',
+  validatorHandler({
+    requestQuerySchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      definitions: {
+        MediaType: {
+          enum: ['audiobook', 'book', 'movie', 'tv', 'video_game'],
+          type: 'string',
+        },
+      },
+      type: 'object',
+      properties: {
+        mediaType: { $ref: '#/definitions/MediaType' },
+        tmdbId: { type: 'number' },
+      },
+      required: ['mediaType', 'tmdbId'],
+    },
+  }),
+  _MediaItemController.detailsByExternalId
+);
+router.get(
   '/api/details/update-metadata/:mediaItemId',
   validatorHandler({
     pathParamsSchema: {
@@ -388,7 +418,10 @@ router.get(
                 onlyWithUserRating: { type: ['boolean', 'null'] },
                 onlyWithoutUserRating: { type: ['boolean', 'null'] },
                 onlyWithProgress: { type: ['boolean', 'null'] },
+                onlyUnseenItems: { type: ['boolean', 'null'] },
+                includeUnreleasedItems: { type: ['boolean', 'null'] },
                 page: { type: ['number', 'null'] },
+                limit: { type: ['number', 'null'] },
               },
             },
             {
@@ -411,6 +444,7 @@ router.get(
             'mediaType',
             'nextAiring',
             'progress',
+            'random',
             'releaseDate',
             'status',
             'title',
@@ -446,6 +480,7 @@ router.get(
             'mediaType',
             'nextAiring',
             'progress',
+            'random',
             'releaseDate',
             'status',
             'title',
@@ -474,6 +509,8 @@ router.get(
         onlyWithUserRating: { type: ['boolean', 'null'] },
         onlyWithoutUserRating: { type: ['boolean', 'null'] },
         onlyWithProgress: { type: ['boolean', 'null'] },
+        onlyUnseenItems: { type: ['boolean', 'null'] },
+        includeUnreleasedItems: { type: ['boolean', 'null'] },
       },
     },
   }),
@@ -591,8 +628,33 @@ router.get(
   validatorHandler({
     requestQuerySchema: {
       $schema: 'http://json-schema.org/draft-07/schema#',
+      definitions: {
+        MediaType: {
+          enum: ['audiobook', 'book', 'movie', 'tv', 'video_game'],
+          type: 'string',
+        },
+        MediaItemOrderBy: {
+          enum: ['listedAt', 'random', 'releaseDate', 'title'],
+          type: 'string',
+        },
+        SortOrder: { enum: ['asc', 'desc'], type: 'string' },
+      },
       type: 'object',
-      properties: { listId: { type: 'number' } },
+      properties: {
+        listId: { type: 'number' },
+        mediaType: {
+          oneOf: [{ $ref: '#/definitions/MediaType' }, { type: 'null' }],
+        },
+        tmdbId: { type: ['number', 'null'] },
+        page: { type: ['number', 'null'] },
+        limit: { type: ['number', 'null'] },
+        orderBy: {
+          oneOf: [{ $ref: '#/definitions/MediaItemOrderBy' }, { type: 'null' }],
+        },
+        sortOrder: {
+          oneOf: [{ $ref: '#/definitions/SortOrder' }, { type: 'null' }],
+        },
+      },
       required: ['listId'],
     },
   }),
@@ -631,6 +693,42 @@ router.delete(
     },
   }),
   _ListItemController.removeItem
+);
+router.put(
+  '/api/list-item/by-external-id',
+  validatorHandler({
+    requestBodySchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      definitions: {
+        MediaType: {
+          enum: ['audiobook', 'book', 'movie', 'tv', 'video_game'],
+          type: 'string',
+        },
+        ExternalIds: {
+          type: 'object',
+          properties: {
+            tmdbId: { type: ['number', 'null'] },
+            imdbId: { type: ['string', 'null'] },
+            tvdbId: { type: ['number', 'null'] },
+            tvmazeId: { type: ['number', 'null'] },
+            igdbId: { type: ['number', 'null'] },
+            openlibraryId: { type: ['string', 'null'] },
+            audibleId: { type: ['string', 'null'] },
+            traktId: { type: ['number', 'null'] },
+            goodreadsId: { type: ['number', 'null'] },
+          },
+        },
+      },
+      type: 'object',
+      properties: {
+        listId: { type: 'number' },
+        mediaType: { $ref: '#/definitions/MediaType' },
+        id: { $ref: '#/definitions/ExternalIds' },
+      },
+      required: ['id', 'listId', 'mediaType'],
+    },
+  }),
+  _ListItemController.addByExternalId
 );
 router.get(
   '/api/lists',
@@ -897,6 +995,33 @@ router.delete(
   _SeenController.removeFromSeenHistory
 );
 router.get(
+  '/api/seen',
+  validatorHandler({
+    requestQuerySchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      definitions: {
+        MediaType: {
+          enum: ['audiobook', 'book', 'movie', 'tv', 'video_game'],
+          type: 'string',
+        },
+      },
+      type: 'object',
+      properties: {
+        page: { type: ['number', 'null'] },
+        limit: { type: ['number', 'null'] },
+        extended: { type: ['boolean', 'null'] },
+        mediaType: {
+          oneOf: [{ $ref: '#/definitions/MediaType' }, { type: 'null' }],
+        },
+        tmdbId: { type: ['number', 'null'] },
+        seasonNumber: { type: ['number', 'null'] },
+        episodeNumber: { type: ['number', 'null'] },
+      },
+    },
+  }),
+  _SeenController.get
+);
+router.get(
   '/api/statistics/summary',
   validatorHandler({}),
   _StatisticsController.add
@@ -1138,6 +1263,41 @@ router.put(
   }),
   _WatchlistController.add
 );
+router.put(
+  '/api/watchlist/by-external-id',
+  validatorHandler({
+    requestBodySchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      definitions: {
+        MediaType: {
+          enum: ['audiobook', 'book', 'movie', 'tv', 'video_game'],
+          type: 'string',
+        },
+        ExternalIds: {
+          type: 'object',
+          properties: {
+            tmdbId: { type: ['number', 'null'] },
+            imdbId: { type: ['string', 'null'] },
+            tvdbId: { type: ['number', 'null'] },
+            tvmazeId: { type: ['number', 'null'] },
+            igdbId: { type: ['number', 'null'] },
+            openlibraryId: { type: ['string', 'null'] },
+            audibleId: { type: ['string', 'null'] },
+            traktId: { type: ['number', 'null'] },
+            goodreadsId: { type: ['number', 'null'] },
+          },
+        },
+      },
+      type: 'object',
+      properties: {
+        mediaType: { $ref: '#/definitions/MediaType' },
+        id: { $ref: '#/definitions/ExternalIds' },
+      },
+      required: ['id', 'mediaType'],
+    },
+  }),
+  _WatchlistController.addByExternalId
+);
 router.delete(
   '/api/watchlist',
   validatorHandler({
@@ -1153,6 +1313,27 @@ router.delete(
     },
   }),
   _WatchlistController.delete
+);
+router.get(
+  '/api/watchlist/by-external-id',
+  validatorHandler({
+    requestQuerySchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      definitions: {
+        MediaType: {
+          enum: ['audiobook', 'book', 'movie', 'tv', 'video_game'],
+          type: 'string',
+        },
+      },
+      type: 'object',
+      properties: {
+        mediaType: { $ref: '#/definitions/MediaType' },
+        tmdbId: { type: 'number' },
+      },
+      required: ['mediaType', 'tmdbId'],
+    },
+  }),
+  _WatchlistController.get
 );
 router.post(
   '/api/import-goodreads',
